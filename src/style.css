@@ -92,8 +92,10 @@ body {
 }
 
 .edge-line-preview {
+  stroke: #f59e0b;
+  stroke-width: 3;
   stroke-dasharray: 6 4;
-  opacity: 0.85;
+  opacity: 0.95;
 }
 
 marker polygon {
@@ -340,8 +342,11 @@ marker polygon {
   border: 1px solid #334155;
   border-radius: 8px;
   backdrop-filter: blur(2px);
-  min-width: 180px;
-  max-width: min(440px, calc(100vw - 24px));
+  position: relative;
+  width: 178px;
+  min-width: 178px;
+  max-width: 178px;
+  overflow: visible;
 }
 
 .zoom-panel {
@@ -379,13 +384,58 @@ marker polygon {
 }
 
 .dropdown-body {
-  padding: 0 10px 10px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  padding: 8px 10px 10px;
+  background: rgba(2, 6, 23, 0.92);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  backdrop-filter: blur(2px);
   max-height: min(45vh, 380px);
   overflow: auto;
+  z-index: 20;
+}
+
+.meta-row {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  gap: 4px;
+}
+
+.meta-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dropdown-body button {
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.dropdown-body button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .build-panel {
-  min-width: 360px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+}
+
+.build-panel .dropdown-body {
+  width: 360px;
 }
 
 .docs-hint {
