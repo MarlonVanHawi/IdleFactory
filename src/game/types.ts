@@ -61,6 +61,8 @@ export interface GraphEdge {
   from: string
   to: string
   capacityPerSecond: number
+  routePoints: Array<{ x: number; y: number }>
+  isRouteManual: boolean
 }
 
 export interface ShopItemDef {
@@ -82,6 +84,7 @@ export interface ResearchUpgradeDef {
 export interface GameState {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  selectedEdgeId: string | null
   pendingConnectionFrom: string | null
   warehousePanelOpen: boolean
   buildPanelOpen: boolean

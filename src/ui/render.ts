@@ -1,6 +1,7 @@
 import { ALL_RESOURCES, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_LABELS, SHOP_ITEMS } from '../game/data'
 import { canAffordCosts, totalResource, warehouseInventory } from '../game/simulation'
-import type { GameState, GraphNode } from '../game/types'
+import { isMachineBuildUnlocked } from '../game/unlocks'
+import type { GameState, GraphNode, MachineKind } from '../game/types'
 
 interface RenderAppOptions {
   state: GameState
@@ -76,8 +77,18 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
     `
   }).join('')
 
+  const buildMachineOrder: MachineKind[] = ['coalMine', 'woodcutter', 'sawmill', 'powerPlant']
+  const buildMachineButtons = buildMachineOrder
+    .filter((machineKind) => isMachineBuildUnlocked(state, machineKind))
+    .map(
+      (machineKind) =>
+        `<button data-action="add-machine" data-machine="${machineKind}">+ ${MACHINE_DEFS[machineKind].label}</button>`,
+    )
+    .join('')
+
   const nodesHtml = state.nodes
     .map((node) => {
+      const isConnectorNode = node.kind === 'splitter' || node.kind === 'merger'
       const machineDef = node.machineKind ? MACHINE_DEFS[node.machineKind] : null
       const inputEntries = machineDef
         ? Object.entries(machineDef.inputs)
@@ -104,6 +115,48 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
         state.pendingConnectionFrom && state.pendingConnectionFrom === node.id
           ? '<span class="pill pending">connecting...</span>'
           : ''
+
+      if (isConnectorNode) {
+        return `
+          <article
+            class="graph-node kind-${node.kind} connector-node ${dragNodeId === node.id ? 'is-dragging' : ''}"
+            data-node-id="${node.id}"
+            style="left:${node.x}px; top:${node.y}px;"
+          >
+            <div class="node-head connector-head" data-drag-handle="${node.id}">
+              <div class="node-head-left">
+                <button class="danger head-remove" data-action="delete-node" data-node-id="${node.id}">X</button>
+              </div>
+              <div class="connector-head-center">
+                <strong class="connector-title">${node.label}</strong>
+              </div>
+              <div class="node-head-right">
+                ${connectHint}
+              </div>
+            </div>
+            <div class="connector-body"></div>
+            <button
+              class="port-arrow port-in connector-port"
+              data-action="end-connect"
+              data-node-id="${node.id}"
+              ${canNodeInput(node) ? '' : 'disabled'}
+              title="Input port"
+            >
+              ▸
+            </button>
+            <button
+              class="port-arrow port-out connector-port"
+              data-action="start-connect"
+              data-node-id="${node.id}"
+              ${canNodeOutput(node) ? '' : 'disabled'}
+              title="Output port"
+            >
+              ▸
+            </button>
+          </article>
+        `
+      }
+
       return `
         <article
           class="graph-node kind-${node.kind} ${dragNodeId === node.id ? 'is-dragging' : ''}"
@@ -160,7 +213,7 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
         >
           <svg class="edges" viewBox="0 0 ${worldWidth} ${worldHeight}" preserveAspectRatio="none">
             <defs>
-              <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <marker id="arrow" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
                 <polygon points="0 0, 10 3.5, 0 7" />
               </marker>
             </defs>
@@ -190,15 +243,24 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
           ${
             state.buildPanelOpen
               ? `<div class="dropdown-body toolbar" data-scroll-key="build">
-                  <button data-action="add-warehouse">+ Warehouse</button>
-                  <button data-action="add-machine" data-machine="coalMine">+ Coal Mine</button>
-                  <button data-action="add-machine" data-machine="powerPlant">+ Power Plant</button>
-                  <button data-action="add-machine" data-machine="woodcutter">+ Woodcutter</button>
-                  <button data-action="add-machine" data-machine="sawmill">+ Sawmill</button>
-                  <button data-action="add-connector" data-kind="splitter">+ Splitter</button>
-                  <button data-action="add-connector" data-kind="merger">+ Merger</button>
-                  <button data-action="clear-connect">Cancel Connect</button>
-                  <button data-action="clear-edges">Clear Edges</button>
+                  <section class="build-category">
+                    <div class="build-category-title">Structures</div>
+                    <button data-action="add-warehouse">+ Warehouse</button>
+                  </section>
+                  <section class="build-category">
+                    <div class="build-category-title">Connectors</div>
+                    <button data-action="add-connector" data-kind="splitter">+ Splitter</button>
+                    <button data-action="add-connector" data-kind="merger">+ Merger</button>
+                  </section>
+                  <section class="build-category">
+                    <div class="build-category-title">Production</div>
+                    ${buildMachineButtons}
+                  </section>
+                  <section class="build-category">
+                    <div class="build-category-title">Graph</div>
+                    <button data-action="clear-connect">Cancel Connect</button>
+                    <button data-action="clear-edges">Clear Edges</button>
+                  </section>
                 </div>`
               : ''
           }

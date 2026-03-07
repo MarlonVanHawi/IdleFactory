@@ -8,11 +8,13 @@ export const MAX_ZOOM = 2.25
 export const WORLD_CENTER_X = WORLD_WIDTH * 0.5
 export const WORLD_CENTER_Y = WORLD_HEIGHT * 0.5
 export const UI_RENDER_INTERVAL_MS = 120
+export const NODE_CLEARANCE_PX = 10
 
 export function createInitialState(): GameState {
   return {
     nodes: [],
     edges: [],
+    selectedEdgeId: null,
     pendingConnectionFrom: null,
     warehousePanelOpen: false,
     buildPanelOpen: false,
