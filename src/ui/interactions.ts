@@ -344,11 +344,20 @@ export function setupInteractions({
       return
     }
     if (action === 'import-save') {
-      const input = app.querySelector('input[data-action="import-save-file"]') as HTMLInputElement | null
-      if (input) {
-        input.value = ''
-        input.click()
-      }
+      const picker = document.createElement('input')
+      picker.type = 'file'
+      picker.accept = 'application/json,.json'
+      picker.addEventListener(
+        'change',
+        () => {
+          const file = picker.files?.[0]
+          if (file) {
+            importSaveFile(file)
+          }
+        },
+        { once: true },
+      )
+      picker.click()
       return
     }
     if (action === 'buy-shop-item') {
@@ -396,25 +405,6 @@ export function setupInteractions({
       render()
     }
   })
-
-  app.addEventListener(
-    'change',
-    (event) => {
-      const target = event.target
-      if (!(target instanceof HTMLInputElement)) {
-        return
-      }
-      if (target.getAttribute('data-action') !== 'import-save-file') {
-        return
-      }
-      const file = target.files?.[0]
-      if (!file) {
-        return
-      }
-      importSaveFile(file)
-    },
-    true,
-  )
 
   app.addEventListener(
     'scroll',

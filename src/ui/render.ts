@@ -306,7 +306,6 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
       <aside class="hud-top-right">
         <button class="save-toggle" data-action="export-save">Export Save</button>
         <button class="save-toggle" data-action="import-save">Import Save</button>
-        <input class="save-file-input" data-action="import-save-file" type="file" accept="application/json,.json" />
         <button class="snap-toggle" data-action="toggle-snap-mode">Snap: ${state.snapMode ? 'On' : 'Off'}</button>
         <div class="credits-hud">Credits: ${formatNumber(totalCredits)}</div>
       </aside>
