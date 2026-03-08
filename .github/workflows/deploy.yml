@@ -57,3 +57,17 @@ jobs:
           script: |
             sudo chmod -R a+rX /var/www/idlefactory
             sudo systemctl reload nginx
+
+      - name: Smoke check live site
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" https://factory.brucksteg.eu || true)
+            if [ "$code" = "200" ]; then
+              echo "Smoke check passed (HTTP 200)."
+              exit 0
+            fi
+            echo "Attempt $i failed (HTTP $code). Retrying..."
+            sleep 3
+          done
+          echo "Smoke check failed after retries."
+          exit 1
