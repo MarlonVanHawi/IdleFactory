@@ -1,6 +1,13 @@
-import { MACHINE_DEFS } from '../game/data'
-import { NODE_CLEARANCE_PX } from '../game/state'
+import { BUILD_COSTS, MACHINE_DEFS } from '../game/data'
+import {
+  GRID_SNAP_OFFSET_X,
+  GRID_SNAP_OFFSET_Y,
+  GRID_SNAP_X,
+  GRID_SNAP_Y,
+  NODE_CLEARANCE_PX,
+} from '../game/state'
 import { isMachineBuildUnlocked } from '../game/unlocks'
+import { totalResource } from '../game/simulation'
 import type { GameState, GraphNode, MachineKind, PanelScrollKey } from '../game/types'
 
 export interface InteractionRefs {
@@ -39,6 +46,8 @@ interface SetupInteractionsArgs {
   getNodes: () => GraphNode[]
   getWorldPointFromClient: (clientX: number, clientY: number) => { x: number; y: number } | null
   clampCamera: () => void
+  exportSaveFile: () => void
+  importSaveFile: (file: File) => void
   render: () => void
 }
 
@@ -168,6 +177,23 @@ function resolveDraggedNodeOverlap(
   }
 }
 
+function snapToGrid(value: number, step: number, offset: number): number {
+  return Math.round((value - offset) / step) * step + offset
+}
+
+function snapNodePosition(
+  node: GraphNode,
+  fallbackWidth: number,
+  state: GameState,
+): { x: number; y: number } {
+  const baseX = snapToGrid(node.x, GRID_SNAP_X, GRID_SNAP_OFFSET_X)
+  const baseY = snapToGrid(node.y, GRID_SNAP_Y, GRID_SNAP_OFFSET_Y)
+  const { width, height } = nodeDimensions(node, fallbackWidth, state)
+  const centeredOffsetX = (GRID_SNAP_X - width) * 0.5
+  const centeredOffsetY = (GRID_SNAP_Y - height) * 0.5
+  return { x: baseX + centeredOffsetX, y: baseY + centeredOffsetY }
+}
+
 export function setupInteractions({
   app,
   state,
@@ -187,6 +213,8 @@ export function setupInteractions({
   getNodes,
   getWorldPointFromClient,
   clampCamera,
+  exportSaveFile,
+  importSaveFile,
   render,
 }: SetupInteractionsArgs): void {
   app.addEventListener('pointerdown', (event) => {
@@ -206,18 +234,28 @@ export function setupInteractions({
 
     if (action === 'add-machine') {
       const machine = actionEl.getAttribute('data-machine')
-      if (machine && machine in MACHINE_DEFS && isMachineBuildUnlocked(state, machine as MachineKind)) {
+      if (
+        machine &&
+        machine in MACHINE_DEFS &&
+        isMachineBuildUnlocked(state, machine as MachineKind) &&
+        totalResource(state, 'credits') >= BUILD_COSTS.machines[machine as MachineKind]
+      ) {
         addMachine(machine as MachineKind)
       }
       return
     }
     if (action === 'add-warehouse') {
-      addWarehouse()
+      if (totalResource(state, 'credits') >= BUILD_COSTS.warehouse) {
+        addWarehouse()
+      }
       return
     }
     if (action === 'add-connector') {
       const kind = actionEl.getAttribute('data-kind')
-      if (kind === 'splitter' || kind === 'merger') {
+      if (
+        (kind === 'splitter' || kind === 'merger') &&
+        totalResource(state, 'credits') >= BUILD_COSTS.connectors[kind]
+      ) {
         addConnector(kind)
       }
       return
@@ -296,6 +334,23 @@ export function setupInteractions({
       render()
       return
     }
+    if (action === 'toggle-snap-mode') {
+      state.snapMode = !state.snapMode
+      render()
+      return
+    }
+    if (action === 'export-save') {
+      exportSaveFile()
+      return
+    }
+    if (action === 'import-save') {
+      const input = app.querySelector('input[data-action="import-save-file"]') as HTMLInputElement | null
+      if (input) {
+        input.value = ''
+        input.click()
+      }
+      return
+    }
     if (action === 'buy-shop-item') {
       const id = actionEl.getAttribute('data-shop-id')
       if (id) {
@@ -341,6 +396,25 @@ export function setupInteractions({
       render()
     }
   })
+
+  app.addEventListener(
+    'change',
+    (event) => {
+      const target = event.target
+      if (!(target instanceof HTMLInputElement)) {
+        return
+      }
+      if (target.getAttribute('data-action') !== 'import-save-file') {
+        return
+      }
+      const file = target.files?.[0]
+      if (!file) {
+        return
+      }
+      importSaveFile(file)
+    },
+    true,
+  )
 
   app.addEventListener(
     'scroll',
@@ -583,6 +657,17 @@ export function setupInteractions({
   )
 
   window.addEventListener('pointerup', () => {
+    if (refs.dragNodeId) {
+      const node = getNode(refs.dragNodeId)
+      if (node && state.snapMode) {
+        const snapped = snapNodePosition(node, nodeWidth, state)
+        node.x = snapped.x
+        node.y = snapped.y
+        clampNodeIntoWorld(node, worldWidth, worldHeight, nodeWidth, state)
+        resolveDraggedNodeOverlap(node, getNodes(), worldWidth, worldHeight, nodeWidth, state)
+        render()
+      }
+    }
     // Keep connect mode active after mouse release so users can place multiple anchor points by clicking.
     if (state.pendingConnectionFrom) {
       refs.connectionDragStarted = false

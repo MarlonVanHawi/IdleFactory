@@ -1,4 +1,4 @@
-import { ALL_RESOURCES, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_LABELS, SHOP_ITEMS } from '../game/data'
+import { ALL_RESOURCES, BUILD_COSTS, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_LABELS, SHOP_ITEMS } from '../game/data'
 import { canAffordCosts, totalResource, warehouseInventory } from '../game/simulation'
 import { isMachineBuildUnlocked } from '../game/unlocks'
 import type { GameState, GraphNode, MachineKind } from '../game/types'
@@ -81,10 +81,17 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
   const buildMachineButtons = buildMachineOrder
     .filter((machineKind) => isMachineBuildUnlocked(state, machineKind))
     .map(
-      (machineKind) =>
-        `<button data-action="add-machine" data-machine="${machineKind}">+ ${MACHINE_DEFS[machineKind].label}</button>`,
+      (machineKind) => {
+        const cost = BUILD_COSTS.machines[machineKind]
+        const disabled = totalCredits < cost ? 'disabled' : ''
+        return `<button data-action="add-machine" data-machine="${machineKind}" ${disabled}>+ ${MACHINE_DEFS[machineKind].label} (${formatNumber(cost)} cr)</button>`
+      },
     )
     .join('')
+  const warehouseCost = BUILD_COSTS.warehouse
+  const canBuildWarehouse = totalCredits >= warehouseCost
+  const splitterCost = BUILD_COSTS.connectors.splitter
+  const mergerCost = BUILD_COSTS.connectors.merger
 
   const nodesHtml = state.nodes
     .map((node) => {
@@ -245,12 +252,12 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
               ? `<div class="dropdown-body toolbar" data-scroll-key="build">
                   <section class="build-category">
                     <div class="build-category-title">Structures</div>
-                    <button data-action="add-warehouse">+ Warehouse</button>
+                    <button data-action="add-warehouse" ${canBuildWarehouse ? '' : 'disabled'}>+ Warehouse (${formatNumber(warehouseCost)} cr)</button>
                   </section>
                   <section class="build-category">
                     <div class="build-category-title">Connectors</div>
-                    <button data-action="add-connector" data-kind="splitter">+ Splitter</button>
-                    <button data-action="add-connector" data-kind="merger">+ Merger</button>
+                    <button data-action="add-connector" data-kind="splitter" ${totalCredits >= splitterCost ? '' : 'disabled'}>+ Splitter (${formatNumber(splitterCost)} cr)</button>
+                    <button data-action="add-connector" data-kind="merger" ${totalCredits >= mergerCost ? '' : 'disabled'}>+ Merger (${formatNumber(mergerCost)} cr)</button>
                   </section>
                   <section class="build-category">
                     <div class="build-category-title">Production</div>
@@ -295,6 +302,13 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
               : ''
           }
         </section>
+      </aside>
+      <aside class="hud-top-right">
+        <button class="save-toggle" data-action="export-save">Export Save</button>
+        <button class="save-toggle" data-action="import-save">Import Save</button>
+        <input class="save-file-input" data-action="import-save-file" type="file" accept="application/json,.json" />
+        <button class="snap-toggle" data-action="toggle-snap-mode">Snap: ${state.snapMode ? 'On' : 'Off'}</button>
+        <div class="credits-hud">Credits: ${formatNumber(totalCredits)}</div>
       </aside>
     </main>
   `

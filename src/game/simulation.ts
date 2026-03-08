@@ -178,7 +178,15 @@ function nodesByResourceAvailability(state: GameState, resource: ResourceId): Gr
 }
 
 export function totalResource(state: GameState, resource: ResourceId): number {
-  return state.nodes.reduce((sum, node) => sum + node.inventory[resource], 0)
+  const nodeTotal = state.nodes.reduce((sum, node) => sum + node.inventory[resource], 0)
+  if (resource === 'credits') {
+    return nodeTotal + state.walletCredits
+  }
+  return nodeTotal
+}
+
+export function spendCredits(state: GameState, amount: number): boolean {
+  return spendResourceFromNodes(state, 'credits', amount)
 }
 
 export function canAffordCosts(state: GameState, creditsCost: number, researchCost: number): boolean {
@@ -193,6 +201,11 @@ function spendResourceFromNodes(state: GameState, resource: ResourceId, amount: 
     return false
   }
   let remaining = amount
+  if (resource === 'credits' && state.walletCredits > 0) {
+    const fromWallet = Math.min(state.walletCredits, remaining)
+    state.walletCredits -= fromWallet
+    remaining -= fromWallet
+  }
   const contributors = nodesByResourceAvailability(state, resource)
   for (const node of contributors) {
     if (remaining <= 0) {

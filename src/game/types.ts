@@ -84,6 +84,8 @@ export interface ResearchUpgradeDef {
 export interface GameState {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  walletCredits: number
+  snapMode: boolean
   selectedEdgeId: string | null
   pendingConnectionFrom: string | null
   warehousePanelOpen: boolean

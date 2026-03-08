@@ -1,5 +1,5 @@
 import './style.css'
-import { MACHINE_DEFS } from './game/data'
+import { BUILD_COSTS, MACHINE_DEFS } from './game/data'
 import {
   MAX_ZOOM,
   MIN_ZOOM,
@@ -15,6 +15,7 @@ import {
   buyResearchUpgrade,
   buyShopItem,
   createEmptyInventory,
+  spendCredits,
   runSimulation,
 } from './game/simulation'
 import { createNode, nextEdgeId } from './game/factory'
@@ -39,6 +40,8 @@ import type {
 
 const app = document.querySelector<HTMLDivElement>('#app') as HTMLDivElement
 const SAVE_KEY = 'idle-factory-node-state-v1'
+const SAVE_FILE_FORMAT = 'idle-factory-save'
+const SAVE_FILE_VERSION = 1
 const cameraBounds = { worldWidth: WORLD_WIDTH, worldHeight: WORLD_HEIGHT }
 const cameraLimits = { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }
 const cameraCenter = { worldCenterX: WORLD_CENTER_X, worldCenterY: WORLD_CENTER_Y }
@@ -113,6 +116,10 @@ function render(): void {
 }
 
 function addMachine(machineKind: MachineKind): void {
+  const buildCost = BUILD_COSTS.machines[machineKind]
+  if (!spendCredits(state, buildCost)) {
+    return
+  }
   const def = MACHINE_DEFS[machineKind]
   const center = getViewportWorldCenter(state)
   const node = createNode(
@@ -127,6 +134,10 @@ function addMachine(machineKind: MachineKind): void {
 }
 
 function addWarehouse(): void {
+  const buildCost = BUILD_COSTS.warehouse
+  if (!spendCredits(state, buildCost)) {
+    return
+  }
   const center = getViewportWorldCenter(state)
   const node = createNode(
     'warehouse',
@@ -139,6 +150,10 @@ function addWarehouse(): void {
 }
 
 function addConnector(kind: 'splitter' | 'merger'): void {
+  const buildCost = BUILD_COSTS.connectors[kind]
+  if (!spendCredits(state, buildCost)) {
+    return
+  }
   const label = kind === 'splitter' ? 'Splitter' : 'Merger'
   const center = getViewportWorldCenter(state)
   state.nodes.push(
@@ -171,6 +186,129 @@ function createEdge(fromId: string, toId: string, routePoints: Array<{ x: number
   state.selectedEdgeId = null
 }
 
+function unwrapImportedPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') {
+    return payload
+  }
+  const envelope = payload as { format?: unknown; state?: unknown }
+  if (envelope.format === SAVE_FILE_FORMAT && envelope.state) {
+    return envelope.state
+  }
+  return payload
+}
+
+function parseStatePayload(payload: unknown): GameState {
+  const base = createInitialState()
+  const parsed = unwrapImportedPayload(payload) as Partial<GameState> & {
+    nodes?: Array<Partial<GraphNode>>
+    edges?: Array<{
+      id?: string
+      from?: string
+      to?: string
+      capacityPerSecond?: number
+      routePoints?: Array<{ x?: number; y?: number }>
+      isRouteManual?: boolean
+    }>
+  }
+  const hasLegacyProgress =
+    (Array.isArray(parsed.nodes) && parsed.nodes.length > 0) ||
+    (Array.isArray(parsed.edges) && parsed.edges.length > 0)
+
+  const nodes = Array.isArray(parsed.nodes)
+    ? parsed.nodes
+        .filter(
+          (node) => typeof node?.id === 'string' && typeof node?.kind === 'string' && typeof node?.label === 'string',
+        )
+        .map((node) => ({
+          id: node.id as string,
+          kind: node.kind as GraphNode['kind'],
+          label: node.label as string,
+          x: typeof node.x === 'number' ? node.x : 0,
+          y: typeof node.y === 'number' ? node.y : 0,
+          machineKind: node.machineKind,
+          inventory: { ...createEmptyInventory(), ...(node.inventory ?? {}) },
+        }))
+    : base.nodes
+
+  const edges = Array.isArray(parsed.edges)
+    ? parsed.edges
+        .filter((edge) => typeof edge?.id === 'string' && typeof edge?.from === 'string' && typeof edge?.to === 'string')
+        .map((edge) => ({
+          id: edge.id as string,
+          from: edge.from as string,
+          to: edge.to as string,
+          capacityPerSecond: typeof edge.capacityPerSecond === 'number' ? edge.capacityPerSecond : 2.5,
+          routePoints: Array.isArray(edge.routePoints)
+            ? edge.routePoints
+                .filter((point) => typeof point?.x === 'number' && typeof point?.y === 'number')
+                .map((point) => ({ x: point.x as number, y: point.y as number }))
+            : [],
+          isRouteManual: edge.isRouteManual === true,
+        }))
+    : base.edges
+
+  return {
+    ...base,
+    ...parsed,
+    walletCredits:
+      typeof parsed.walletCredits === 'number' ? parsed.walletCredits : hasLegacyProgress ? 0 : base.walletCredits,
+    snapMode: parsed.snapMode === true,
+    nodes,
+    edges,
+    selectedEdgeId:
+      typeof parsed.selectedEdgeId === 'string' && edges.some((edge) => edge.id === parsed.selectedEdgeId)
+        ? parsed.selectedEdgeId
+        : null,
+  }
+}
+
+function replaceState(nextState: GameState): void {
+  Object.assign(state, nextState)
+}
+
+function exportSaveFile(): void {
+  const snapshot = parseStatePayload(state)
+  const payload = {
+    format: SAVE_FILE_FORMAT,
+    version: SAVE_FILE_VERSION,
+    savedAt: new Date().toISOString(),
+    state: snapshot,
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const href = URL.createObjectURL(blob)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = `idle-factory-save-${stamp}.json`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(href)
+}
+
+function importSaveFile(file: File): void {
+  file
+    .text()
+    .then((text) => {
+      const parsed = JSON.parse(text) as unknown
+      const nextState = parseStatePayload(parsed)
+      replaceState(nextState)
+      interactionRefs.connectionPointerClientX = null
+      interactionRefs.connectionPointerClientY = null
+      interactionRefs.connectionRoutePoints = []
+      interactionRefs.connectionDragStarted = false
+      interactionRefs.dragNodeId = null
+      interactionRefs.dragEdgeId = null
+      interactionRefs.dragEdgePointIndex = -1
+      interactionRefs.dragEdgeAxis = null
+      interactionRefs.isPanning = false
+      render()
+    })
+    .catch(() => {
+      window.alert('Import failed. Please choose a valid Idle Factory save JSON file.')
+    })
+}
+
 function deleteNode(nodeId: string): void {
   state.nodes = state.nodes.filter((node) => node.id !== nodeId)
   state.edges = state.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId)
@@ -183,77 +321,14 @@ function deleteNode(nodeId: string): void {
 }
 
 function loadState(): GameState {
-  const base = createInitialState()
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) {
-      return base
+      return createInitialState()
     }
-    const parsed = JSON.parse(raw) as Partial<GameState> & {
-      nodes?: Array<Partial<GraphNode>>
-      edges?: Array<{
-        id?: string
-        from?: string
-        to?: string
-        capacityPerSecond?: number
-        routePoints?: Array<{ x?: number; y?: number }>
-        isRouteManual?: boolean
-      }>
-    }
-
-    const nodes = Array.isArray(parsed.nodes)
-      ? parsed.nodes
-          .filter(
-            (node) =>
-              typeof node?.id === 'string' &&
-              typeof node?.kind === 'string' &&
-              typeof node?.label === 'string',
-          )
-          .map((node) => ({
-            id: node.id as string,
-            kind: node.kind as GraphNode['kind'],
-            label: node.label as string,
-            x: typeof node.x === 'number' ? node.x : 0,
-            y: typeof node.y === 'number' ? node.y : 0,
-            machineKind: node.machineKind,
-            inventory: { ...createEmptyInventory(), ...(node.inventory ?? {}) },
-          }))
-      : base.nodes
-
-    const edges = Array.isArray(parsed.edges)
-      ? parsed.edges
-          .filter(
-            (edge) =>
-              typeof edge?.id === 'string' &&
-              typeof edge?.from === 'string' &&
-              typeof edge?.to === 'string',
-          )
-          .map((edge) => ({
-            id: edge.id as string,
-            from: edge.from as string,
-            to: edge.to as string,
-            capacityPerSecond: typeof edge.capacityPerSecond === 'number' ? edge.capacityPerSecond : 2.5,
-            routePoints: Array.isArray(edge.routePoints)
-              ? edge.routePoints
-                  .filter((point) => typeof point?.x === 'number' && typeof point?.y === 'number')
-                  .map((point) => ({ x: point.x as number, y: point.y as number }))
-              : [],
-            isRouteManual: edge.isRouteManual === true,
-          }))
-      : base.edges
-
-    return {
-      ...base,
-      ...parsed,
-      nodes,
-      edges,
-      selectedEdgeId:
-        typeof parsed.selectedEdgeId === 'string' && edges.some((edge) => edge.id === parsed.selectedEdgeId)
-          ? parsed.selectedEdgeId
-          : null,
-    }
+    return parseStatePayload(JSON.parse(raw) as unknown)
   } catch {
-    return base
+    return createInitialState()
   }
 }
 
@@ -285,6 +360,8 @@ setupInteractions({
   getNodes: () => state.nodes,
   getWorldPointFromClient: (clientX, clientY) => getWorldPointFromClient(state, clientX, clientY),
   clampCamera: () => clampCamera(state, cameraBounds),
+  exportSaveFile,
+  importSaveFile,
   render,
 })
 
