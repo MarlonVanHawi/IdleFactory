@@ -1,6 +1,13 @@
-import { ALL_RESOURCES, BUILD_COSTS, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_LABELS, SHOP_ITEMS } from '../game/data'
+import {
+  ALL_RESOURCES,
+  BUILD_COSTS,
+  MACHINE_DEFS,
+  RESEARCH_UPGRADES,
+  RESOURCE_LABELS,
+  SHOP_ITEMS,
+} from '../game/data'
 import { canAffordCosts, totalResource, warehouseInventory } from '../game/simulation'
-import { isMachineBuildUnlocked } from '../game/unlocks'
+import { isMachineBuildUnlocked, isShopItemUnlocked } from '../game/unlocks'
 import type { GameState, GraphNode, MachineKind } from '../game/types'
 
 interface RenderAppOptions {
@@ -21,7 +28,7 @@ function formatNumber(value: number): string {
 }
 
 function canNodeOutput(node: GraphNode): boolean {
-  return node.kind !== 'warehouse'
+  return node.kind !== 'warehouse' && node.kind !== 'market'
 }
 
 function canNodeInput(_node: GraphNode): boolean {
@@ -35,7 +42,7 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
   const warehouseRows = ALL_RESOURCES.map(
     (resource) => `<div>${RESOURCE_LABELS[resource]}: ${formatNumber(warehouse[resource])}</div>`,
   ).join('')
-  const shopRows = SHOP_ITEMS.map((item) => {
+  const shopRows = SHOP_ITEMS.filter((item) => state.shopPurchased[item.id] || isShopItemUnlocked(state, item.id)).map((item) => {
     const bought = state.shopPurchased[item.id]
     const affordable = totalCredits >= item.cost
     return `
@@ -77,7 +84,7 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
     `
   }).join('')
 
-  const buildMachineOrder: MachineKind[] = ['coalMine', 'woodcutter', 'sawmill', 'powerPlant']
+  const buildMachineOrder: MachineKind[] = ['municipalDynamo', 'coalMine', 'woodcutter', 'sawmill', 'powerPlant']
   const buildMachineButtons = buildMachineOrder
     .filter((machineKind) => isMachineBuildUnlocked(state, machineKind))
     .map(
@@ -89,7 +96,9 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
     )
     .join('')
   const warehouseCost = BUILD_COSTS.warehouse
+  const marketCost = BUILD_COSTS.market
   const canBuildWarehouse = totalCredits >= warehouseCost
+  const canBuildMarket = totalCredits >= marketCost
   const splitterCost = BUILD_COSTS.connectors.splitter
   const mergerCost = BUILD_COSTS.connectors.merger
 
@@ -101,11 +110,15 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
         ? Object.entries(machineDef.inputs)
         : node.kind === 'warehouse'
           ? [['storage', 1]]
+          : node.kind === 'market'
+            ? [['sellable goods', 1]]
           : [['any', 1]]
       const outputEntries = machineDef
         ? Object.entries(machineDef.outputs)
         : node.kind === 'warehouse'
           ? [['none', 0]]
+          : node.kind === 'market'
+            ? [['credits', 1]]
           : [['any', 1]]
       const inputLines =
         inputEntries
@@ -118,6 +131,9 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
       const stockLines = ALL_RESOURCES.filter((resource) => node.inventory[resource] > 0.001)
         .map((resource) => `${resource} ${formatNumber(node.inventory[resource])}`)
         .join(' | ')
+      const marketRate =
+        node.kind === 'market' ? state.marketCreditsPerSecondByNode[node.id] ?? 0 : null
+      const noPower = node.kind === 'machine' && state.noPowerByNode[node.id] === true
       const connectHint =
         state.pendingConnectionFrom && state.pendingConnectionFrom === node.id
           ? '<span class="pill pending">connecting...</span>'
@@ -176,6 +192,7 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
             </div>
             <strong class="node-title">${node.label}</strong>
             <div class="node-head-right">
+              ${noPower ? '<span class="power-warning" title="No power">⚡</span>' : ''}
               ${connectHint}
             </div>
           </div>
@@ -205,11 +222,57 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
               ▸
             </button>
           </section>
-          <div class="uml-stock tiny">${stockLines || 'stored: empty'}</div>
+          <div class="uml-stock tiny">${
+            node.kind === 'market'
+              ? `sell rate: ${formatNumber(marketRate ?? 0)} cr/s${stockLines ? ` | buffer: ${stockLines}` : ''}`
+              : stockLines || 'stored: empty'
+          }</div>
         </article>
       `
     })
     .join('')
+
+  const openDropdownBody = state.warehousePanelOpen
+    ? `<div class="dropdown-body warehouse" data-scroll-key="warehouse">
+        ${warehouseRows}
+      </div>`
+    : state.buildPanelOpen
+      ? `<div class="dropdown-body toolbar is-build-dropdown" data-scroll-key="build">
+          <section class="build-category">
+            <div class="build-category-title">Structures</div>
+            <button data-action="add-warehouse" ${canBuildWarehouse ? '' : 'disabled'}>+ Warehouse (${formatNumber(warehouseCost)} cr)</button>
+            <button data-action="add-market" ${canBuildMarket ? '' : 'disabled'}>+ Market (${formatNumber(marketCost)} cr)</button>
+          </section>
+          <section class="build-category">
+            <div class="build-category-title">Connectors</div>
+            <button data-action="add-connector" data-kind="splitter" ${totalCredits >= splitterCost ? '' : 'disabled'}>+ Splitter (${formatNumber(splitterCost)} cr)</button>
+            <button data-action="add-connector" data-kind="merger" ${totalCredits >= mergerCost ? '' : 'disabled'}>+ Merger (${formatNumber(mergerCost)} cr)</button>
+          </section>
+          <section class="build-category">
+            <div class="build-category-title">Production</div>
+            ${buildMachineButtons}
+          </section>
+          <section class="build-category">
+            <div class="build-category-title">Graph</div>
+            <button data-action="clear-connect">Cancel Connect</button>
+            <button data-action="clear-edges">Clear Edges</button>
+          </section>
+        </div>`
+      : state.researchPanelOpen
+        ? `<div class="dropdown-body" data-scroll-key="research">
+            <div class="tiny">Credits: ${formatNumber(totalCredits)} | Research: ${formatNumber(totalResearch)}</div>
+            ${
+              researchUnlocked
+                ? researchRows
+                : '<div class="tiny muted">Locked: buy Access to the Public Library in Shop.</div>'
+            }
+          </div>`
+        : state.shopPanelOpen
+          ? `<div class="dropdown-body" data-scroll-key="shop">
+              <div class="tiny">Credits available: ${formatNumber(totalCredits)}</div>
+              ${shopRows}
+            </div>`
+          : ''
 
   return `
     <main class="graph-page">
@@ -235,74 +298,24 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
           <button class="panel-toggle" data-action="toggle-warehouse">
             Warehouse ${state.warehousePanelOpen ? '▾' : '▸'}
           </button>
-          ${
-            state.warehousePanelOpen
-              ? `<div class="dropdown-body warehouse" data-scroll-key="warehouse">
-                  ${warehouseRows}
-                </div>`
-              : ''
-          }
         </section>
         <section class="dropdown-panel build-panel">
           <button class="panel-toggle" data-action="toggle-build">
             Build & Actions ${state.buildPanelOpen ? '▾' : '▸'}
           </button>
-          ${
-            state.buildPanelOpen
-              ? `<div class="dropdown-body toolbar" data-scroll-key="build">
-                  <section class="build-category">
-                    <div class="build-category-title">Structures</div>
-                    <button data-action="add-warehouse" ${canBuildWarehouse ? '' : 'disabled'}>+ Warehouse (${formatNumber(warehouseCost)} cr)</button>
-                  </section>
-                  <section class="build-category">
-                    <div class="build-category-title">Connectors</div>
-                    <button data-action="add-connector" data-kind="splitter" ${totalCredits >= splitterCost ? '' : 'disabled'}>+ Splitter (${formatNumber(splitterCost)} cr)</button>
-                    <button data-action="add-connector" data-kind="merger" ${totalCredits >= mergerCost ? '' : 'disabled'}>+ Merger (${formatNumber(mergerCost)} cr)</button>
-                  </section>
-                  <section class="build-category">
-                    <div class="build-category-title">Production</div>
-                    ${buildMachineButtons}
-                  </section>
-                  <section class="build-category">
-                    <div class="build-category-title">Graph</div>
-                    <button data-action="clear-connect">Cancel Connect</button>
-                    <button data-action="clear-edges">Clear Edges</button>
-                  </section>
-                </div>`
-              : ''
-          }
         </section>
         <section class="dropdown-panel">
           <button class="panel-toggle" data-action="toggle-research">
             Research ${state.researchPanelOpen ? '▾' : '▸'}
           </button>
-          ${
-            state.researchPanelOpen
-              ? `<div class="dropdown-body" data-scroll-key="research">
-                  <div class="tiny">Credits: ${formatNumber(totalCredits)} | Research: ${formatNumber(totalResearch)}</div>
-                  ${
-                    researchUnlocked
-                      ? researchRows
-                      : '<div class="tiny muted">Locked: buy Access to the Public Library in Shop.</div>'
-                  }
-                </div>`
-              : ''
-          }
         </section>
         <section class="dropdown-panel">
           <button class="panel-toggle" data-action="toggle-shop">
             Shop ${state.shopPanelOpen ? '▾' : '▸'}
           </button>
-          ${
-            state.shopPanelOpen
-              ? `<div class="dropdown-body" data-scroll-key="shop">
-                  <div class="tiny">Credits available: ${formatNumber(totalCredits)}</div>
-                  ${shopRows}
-                </div>`
-              : ''
-          }
         </section>
       </aside>
+      ${openDropdownBody}
       <aside class="hud-top-right">
         <button class="save-toggle" data-action="export-save">Export Save</button>
         <button class="save-toggle" data-action="import-save">Import Save</button>

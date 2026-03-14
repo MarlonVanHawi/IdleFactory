@@ -5,7 +5,7 @@ export const SHOP_ITEMS: ShopItemDef[] = [
     id: 'municipalDynamoAccess',
     name: 'Municipal Dynamo Contract',
     cost: 1000,
-    description: 'Passive +2.5 Energy/s to all warehouses.',
+    description: 'Unlocks the Municipal Dynamo building (+2.5 Energy/s).',
     unlockDescription: 'Available from start',
   },
   {
@@ -20,13 +20,13 @@ export const SHOP_ITEMS: ShopItemDef[] = [
     name: 'Prospecting Pickaxes',
     cost: 3500,
     description: 'Unlocks advanced ore industry planning tier.',
-    unlockDescription: 'Available from start',
+    unlockDescription: 'Requires Access to the Public Library',
   },
   {
     id: 'bessemerLicense',
     name: 'Bessemer Converter License',
     cost: 6200,
     description: 'Unlocks steel industry planning tier.',
-    unlockDescription: 'Available from start',
+    unlockDescription: 'Requires Prospecting Pickaxes',
   },
 ]

@@ -12,6 +12,7 @@ const OUTPUT_LEAD_PX = 18
 const INPUT_APPROACH_PX = 18
 const OUTSIDE_GAP_PX = NODE_CLEARANCE_PX
 const BEND_PENALTY = 24
+const EDGE_COLOR_OPTIONS = ['#facc15', '#22c55e', '#38bdf8', '#a78bfa', '#f97316', '#f43f5e']
 
 interface WorldRect {
   left: number
@@ -23,6 +24,24 @@ interface WorldRect {
 interface Point {
   x: number
   y: number
+}
+
+function extractBendPoints(polyline: Point[]): Point[] {
+  if (polyline.length < 3) {
+    return []
+  }
+  const bends: Point[] = []
+  for (let i = 1; i < polyline.length - 1; i += 1) {
+    const prev = polyline[i - 1]
+    const current = polyline[i]
+    const next = polyline[i + 1]
+    const prevHorizontal = Math.abs(prev.y - current.y) < 0.001
+    const nextHorizontal = Math.abs(current.y - next.y) < 0.001
+    if (prevHorizontal !== nextHorizontal) {
+      bends.push({ x: current.x, y: current.y })
+    }
+  }
+  return bends
 }
 
 function rectToWorld(rect: DOMRect, wrapRect: DOMRect, state: GameState): WorldRect {
@@ -417,19 +436,15 @@ export function renderEdgesFromPorts({
       }
       const pathData = buildPathData(polyline)
       const isSelected = state.selectedEdgeId === edge.id
-      const handlePoints = edge.isRouteManual
-        ? edge.routePoints
-        : [
-            { x: fromX + (toX - fromX) * 0.5, y: fromY },
-            { x: fromX + (toX - fromX) * 0.5, y: toY },
-          ]
+      const handlePoints = edge.isRouteManual ? edge.routePoints : extractBendPoints(polyline)
       const midpointIndex = Math.floor(handlePoints.length * 0.5)
-      const deleteAnchor = handlePoints[midpointIndex] ?? { x: (fromX + toX) * 0.5, y: (fromY + toY) * 0.5 }
+      const deleteAnchor =
+        handlePoints[midpointIndex] ?? polyline[Math.floor(polyline.length * 0.5)] ?? { x: (fromX + toX) * 0.5, y: (fromY + toY) * 0.5 }
       const handles = isSelected
         ? handlePoints
             .map(
               (point, pointIndex) =>
-                `<circle class="edge-handle" data-edge-id="${edge.id}" data-point-index="${pointIndex}" cx="${point.x}" cy="${point.y}" r="7" />`,
+                `<circle class="edge-handle" data-edge-id="${edge.id}" data-point-index="${pointIndex}" data-point-x="${point.x}" data-point-y="${point.y}" cx="${point.x}" cy="${point.y}" r="7" />`,
             )
             .join('')
         : ''
@@ -439,10 +454,19 @@ export function renderEdgesFromPorts({
             <text x="0" y="1">x</text>
           </g>`
         : ''
+      const colorSwatches = isSelected
+        ? EDGE_COLOR_OPTIONS.map((color, index) => {
+            const x = deleteAnchor.x + 34 + index * 16
+            const y = deleteAnchor.y - 14
+            const selected = (edge.color || '#facc15').toLowerCase() === color.toLowerCase()
+            return `<circle class="edge-color-swatch ${selected ? 'is-selected' : ''}" data-action="set-edge-color" data-edge-id="${edge.id}" data-color="${color}" cx="${x}" cy="${y}" r="5.5" style="fill:${color}" />`
+          }).join('')
+        : ''
       return `<path class="edge-hit" data-action="select-edge" data-edge-id="${edge.id}" d="${pathData}" />
-        <path class="edge-line ${isSelected ? 'edge-line-selected' : ''}" d="${pathData}" />
+        <path class="edge-line ${isSelected ? 'edge-line-selected' : ''}" style="stroke:${edge.color || '#facc15'}" d="${pathData}" />
         ${handles}
-        ${deleteButton}`
+        ${deleteButton}
+        ${colorSwatches}`
     })
     .join('')
 

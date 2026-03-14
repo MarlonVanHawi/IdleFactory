@@ -1,9 +1,15 @@
 import type { MachineDef, MachineKind } from '../types'
 
 export const MACHINE_DEFS: Record<MachineKind, MachineDef> = {
+  municipalDynamo: {
+    label: 'Municipal Dynamo',
+    inputs: {},
+    outputs: { energy: 2.5 },
+    opsPerSecond: 1,
+  },
   coalMine: {
     label: 'Coal Mine',
-    inputs: {},
+    inputs: { energy: 0.4 },
     outputs: { coal: 1 },
     opsPerSecond: 1.2,
   },
@@ -15,7 +21,7 @@ export const MACHINE_DEFS: Record<MachineKind, MachineDef> = {
   },
   woodcutter: {
     label: 'Woodcutter',
-    inputs: {},
+    inputs: { energy: 0.3 },
     outputs: { wood: 1 },
     opsPerSecond: 1,
   },

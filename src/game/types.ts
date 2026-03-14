@@ -19,8 +19,8 @@ export type ResourceId =
   | 'coke'
   | 'steel'
 
-export type NodeKind = 'warehouse' | 'machine' | 'splitter' | 'merger'
-export type MachineKind = 'coalMine' | 'powerPlant' | 'woodcutter' | 'sawmill'
+export type NodeKind = 'warehouse' | 'market' | 'machine' | 'splitter' | 'merger'
+export type MachineKind = 'municipalDynamo' | 'coalMine' | 'powerPlant' | 'woodcutter' | 'sawmill'
 export type PanelScrollKey = 'warehouse' | 'build' | 'research' | 'shop'
 
 export type ShopId =
@@ -63,6 +63,7 @@ export interface GraphEdge {
   capacityPerSecond: number
   routePoints: Array<{ x: number; y: number }>
   isRouteManual: boolean
+  color: string
 }
 
 export interface ShopItemDef {
@@ -85,6 +86,8 @@ export interface GameState {
   nodes: GraphNode[]
   edges: GraphEdge[]
   walletCredits: number
+  marketCreditsPerSecondByNode: Record<string, number>
+  noPowerByNode: Record<string, boolean>
   snapMode: boolean
   selectedEdgeId: string | null
   pendingConnectionFrom: string | null

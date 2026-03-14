@@ -36,6 +36,7 @@ interface SetupInteractionsArgs {
   worldHeight: number
   addMachine: (machineKind: MachineKind) => void
   addWarehouse: () => void
+  addMarket: () => void
   addConnector: (kind: 'splitter' | 'merger') => void
   buyShopItem: (id: string) => void
   buyUpgrade: (id: string) => void
@@ -203,6 +204,7 @@ export function setupInteractions({
   worldHeight,
   addMachine,
   addWarehouse,
+  addMarket,
   addConnector,
   buyShopItem,
   buyUpgrade,
@@ -217,6 +219,44 @@ export function setupInteractions({
   importSaveFile,
   render,
 }: SetupInteractionsArgs): void {
+  function cancelConnectionDraft(): void {
+    if (!state.pendingConnectionFrom) {
+      return
+    }
+    state.pendingConnectionFrom = null
+    refs.connectionPointerClientX = null
+    refs.connectionPointerClientY = null
+    refs.connectionRoutePoints = []
+    refs.connectionDragStarted = false
+    render()
+  }
+
+  function toggleExclusivePanel(panel: 'warehouse' | 'build' | 'research' | 'shop'): void {
+    const nextOpen =
+      (panel === 'warehouse' && !state.warehousePanelOpen) ||
+      (panel === 'build' && !state.buildPanelOpen) ||
+      (panel === 'research' && !state.researchPanelOpen) ||
+      (panel === 'shop' && !state.shopPanelOpen)
+
+    state.warehousePanelOpen = false
+    state.buildPanelOpen = false
+    state.researchPanelOpen = false
+    state.shopPanelOpen = false
+
+    if (nextOpen) {
+      if (panel === 'warehouse') {
+        state.warehousePanelOpen = true
+      } else if (panel === 'build') {
+        state.buildPanelOpen = true
+      } else if (panel === 'research') {
+        state.researchPanelOpen = true
+      } else {
+        state.shopPanelOpen = true
+      }
+    }
+    render()
+  }
+
   app.addEventListener('pointerdown', (event) => {
     const target = event.target
     if (!(target instanceof Element)) {
@@ -247,6 +287,12 @@ export function setupInteractions({
     if (action === 'add-warehouse') {
       if (totalResource(state, 'credits') >= BUILD_COSTS.warehouse) {
         addWarehouse()
+      }
+      return
+    }
+    if (action === 'add-market') {
+      if (totalResource(state, 'credits') >= BUILD_COSTS.market) {
+        addMarket()
       }
       return
     }
@@ -287,12 +333,7 @@ export function setupInteractions({
       return
     }
     if (action === 'clear-connect') {
-      state.pendingConnectionFrom = null
-      refs.connectionPointerClientX = null
-      refs.connectionPointerClientY = null
-      refs.connectionRoutePoints = []
-      refs.connectionDragStarted = false
-      render()
+      cancelConnectionDraft()
       return
     }
     if (action === 'select-edge') {
@@ -314,24 +355,33 @@ export function setupInteractions({
       }
       return
     }
+    if (action === 'set-edge-color') {
+      const edgeId = actionEl.getAttribute('data-edge-id')
+      const color = actionEl.getAttribute('data-color')
+      if (edgeId && color) {
+        const edge = state.edges.find((item) => item.id === edgeId)
+        if (edge) {
+          edge.color = color
+          state.selectedEdgeId = edgeId
+          render()
+        }
+      }
+      return
+    }
     if (action === 'toggle-warehouse') {
-      state.warehousePanelOpen = !state.warehousePanelOpen
-      render()
+      toggleExclusivePanel('warehouse')
       return
     }
     if (action === 'toggle-build') {
-      state.buildPanelOpen = !state.buildPanelOpen
-      render()
+      toggleExclusivePanel('build')
       return
     }
     if (action === 'toggle-research') {
-      state.researchPanelOpen = !state.researchPanelOpen
-      render()
+      toggleExclusivePanel('research')
       return
     }
     if (action === 'toggle-shop') {
-      state.shopPanelOpen = !state.shopPanelOpen
-      render()
+      toggleExclusivePanel('shop')
       return
     }
     if (action === 'toggle-snap-mode') {
@@ -404,6 +454,26 @@ export function setupInteractions({
       state.selectedEdgeId = null
       render()
     }
+  })
+
+  app.addEventListener(
+    'contextmenu',
+    (event) => {
+      if (!state.pendingConnectionFrom) {
+        return
+      }
+      event.preventDefault()
+      cancelConnectionDraft()
+    },
+    true,
+  )
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !state.pendingConnectionFrom) {
+      return
+    }
+    event.preventDefault()
+    cancelConnectionDraft()
   })
 
   app.addEventListener(
@@ -506,10 +576,27 @@ export function setupInteractions({
     state.selectedEdgeId = edgeId
     const edge = state.edges.find((item) => item.id === edgeId)
     if (edge && !edge.isRouteManual) {
-      const anchors = getEdgePortAnchors(state, edge)
-      if (anchors) {
-        edge.routePoints = createDefaultEdgeRoutePoints(anchors)
+      const renderedHandles = Array.from(
+        document.querySelectorAll(`.edge-handle[data-edge-id="${edgeId}"]`),
+      ) as SVGCircleElement[]
+      const routedPoints = renderedHandles
+        .map((el) => ({
+          index: Number(el.getAttribute('data-point-index')),
+          x: Number(el.getAttribute('data-point-x')),
+          y: Number(el.getAttribute('data-point-y')),
+        }))
+        .filter((point) => Number.isFinite(point.index) && Number.isFinite(point.x) && Number.isFinite(point.y))
+        .sort((a, b) => a.index - b.index)
+        .map((point) => ({ x: point.x, y: point.y }))
+      if (routedPoints.length > 0) {
+        edge.routePoints = routedPoints
         edge.isRouteManual = true
+      } else {
+        const anchors = getEdgePortAnchors(state, edge)
+        if (anchors) {
+          edge.routePoints = createDefaultEdgeRoutePoints(anchors)
+          edge.isRouteManual = true
+        }
       }
     }
     if (edge && edge.routePoints.length === 2) {

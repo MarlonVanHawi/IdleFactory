@@ -22,6 +22,44 @@ export const ALL_RESOURCES: ResourceId[] = [
   'steel',
 ]
 
+export const SELLABLE_RESOURCES: ResourceId[] = [
+  'coal',
+  'wood',
+  'lumber',
+  'paper',
+  'ironOre',
+  'ironPlate',
+  'copperOre',
+  'copperIngot',
+  'copperWire',
+  'goldOre',
+  'goldIngot',
+  'machineParts',
+  'clay',
+  'bricks',
+  'coke',
+  'steel',
+]
+
+export const RESOURCE_SELL_PRICES: Partial<Record<ResourceId, number>> = {
+  coal: 1.1,
+  wood: 1.0,
+  lumber: 2.4,
+  paper: 3.2,
+  ironOre: 2.0,
+  ironPlate: 3.6,
+  copperOre: 2.4,
+  copperIngot: 4.3,
+  copperWire: 5.6,
+  goldOre: 4.6,
+  goldIngot: 8.5,
+  machineParts: 10.5,
+  clay: 1.7,
+  bricks: 3.3,
+  coke: 4.0,
+  steel: 7.8,
+}
+
 export const RESOURCE_LABELS: Record<ResourceId, string> = {
   coal: 'Coal',
   energy: 'Energy',

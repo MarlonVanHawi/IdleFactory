@@ -73,7 +73,7 @@ function getNode(nodeId: string): GraphNode | undefined {
 }
 
 function canNodeOutput(node: GraphNode): boolean {
-  return node.kind !== 'warehouse'
+  return node.kind !== 'warehouse' && node.kind !== 'market'
 }
 
 function canNodeInput(_node: GraphNode): boolean {
@@ -149,6 +149,22 @@ function addWarehouse(): void {
   render()
 }
 
+function addMarket(): void {
+  const buildCost = BUILD_COSTS.market
+  if (!spendCredits(state, buildCost)) {
+    return
+  }
+  const center = getViewportWorldCenter(state)
+  const node = createNode(
+    'market',
+    'Market',
+    center.x - NODE_WIDTH * 0.5 + (Math.random() * 40 - 20),
+    center.y - 70 + (Math.random() * 40 - 20),
+  )
+  state.nodes.push(node)
+  render()
+}
+
 function addConnector(kind: 'splitter' | 'merger'): void {
   const buildCost = BUILD_COSTS.connectors[kind]
   if (!spendCredits(state, buildCost)) {
@@ -175,6 +191,15 @@ function createEdge(fromId: string, toId: string, routePoints: Array<{ x: number
   if (already) {
     return
   }
+  // Standard nodes allow only one incoming connection.
+  // Splitters/mergers are exempt and can accept multiple inputs.
+  const targetIsConnector = to.kind === 'splitter' || to.kind === 'merger'
+  if (!targetIsConnector) {
+    const hasIncoming = state.edges.some((edge) => edge.to === toId)
+    if (hasIncoming) {
+      return
+    }
+  }
   state.edges.push({
     id: nextEdgeId(),
     from: fromId,
@@ -182,6 +207,7 @@ function createEdge(fromId: string, toId: string, routePoints: Array<{ x: number
     capacityPerSecond: 2.5,
     routePoints: routePoints.map((point) => ({ x: point.x, y: point.y })),
     isRouteManual: routePoints.length > 0,
+    color: '#facc15',
   })
   state.selectedEdgeId = null
 }
@@ -208,6 +234,7 @@ function parseStatePayload(payload: unknown): GameState {
       capacityPerSecond?: number
       routePoints?: Array<{ x?: number; y?: number }>
       isRouteManual?: boolean
+      color?: string
     }>
   }
   const hasLegacyProgress =
@@ -244,6 +271,7 @@ function parseStatePayload(payload: unknown): GameState {
                 .map((point) => ({ x: point.x as number, y: point.y as number }))
             : [],
           isRouteManual: edge.isRouteManual === true,
+          color: typeof edge.color === 'string' && edge.color.trim() ? edge.color : '#facc15',
         }))
     : base.edges
 
@@ -252,6 +280,22 @@ function parseStatePayload(payload: unknown): GameState {
     ...parsed,
     walletCredits:
       typeof parsed.walletCredits === 'number' ? parsed.walletCredits : hasLegacyProgress ? 0 : base.walletCredits,
+    marketCreditsPerSecondByNode:
+      parsed.marketCreditsPerSecondByNode && typeof parsed.marketCreditsPerSecondByNode === 'object'
+        ? Object.fromEntries(
+            Object.entries(parsed.marketCreditsPerSecondByNode).filter(
+              ([key, value]) => typeof key === 'string' && typeof value === 'number' && Number.isFinite(value),
+            ),
+          )
+        : {},
+    noPowerByNode:
+      parsed.noPowerByNode && typeof parsed.noPowerByNode === 'object'
+        ? Object.fromEntries(
+            Object.entries(parsed.noPowerByNode).filter(
+              ([key, value]) => typeof key === 'string' && typeof value === 'boolean',
+            ),
+          )
+        : {},
     snapMode: parsed.snapMode === true,
     nodes,
     edges,
@@ -349,6 +393,7 @@ setupInteractions({
   worldHeight: WORLD_HEIGHT,
   addMachine,
   addWarehouse,
+  addMarket,
   addConnector,
   buyShopItem: (id) => buyShopItem(state, id as ShopId),
   buyUpgrade: (id) => buyResearchUpgrade(state, id as UpgradeId),

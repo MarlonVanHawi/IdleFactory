@@ -19,6 +19,8 @@ export function createInitialState(): GameState {
     nodes: [],
     edges: [],
     walletCredits: 2500,
+    marketCreditsPerSecondByNode: {},
+    noPowerByNode: {},
     snapMode: false,
     selectedEdgeId: null,
     pendingConnectionFrom: null,

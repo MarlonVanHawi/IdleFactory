@@ -1,4 +1,5 @@
-import { ALL_RESOURCES, MACHINE_DEFS, RESEARCH_UPGRADES, SHOP_ITEMS } from './data'
+import { ALL_RESOURCES, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_SELL_PRICES, SHOP_ITEMS } from './data'
+import { isShopItemUnlocked } from './unlocks'
 import type { GameState, GraphEdge, GraphNode, Inventory, MachineDef, MachineKind, ResourceId, ShopId, UpgradeId } from './types'
 
 export function createEmptyInventory(): Inventory {
@@ -44,7 +45,7 @@ function getOutgoingEdges(state: GameState, nodeId: string): GraphEdge[] {
 }
 
 function allowedOutputResources(node: GraphNode): ResourceId[] {
-  if (node.kind === 'warehouse') {
+  if (node.kind === 'warehouse' || node.kind === 'market') {
     return []
   }
   if (node.kind === 'machine') {
@@ -81,29 +82,18 @@ function getRuntimeMachineDef(state: GameState, machineKind: MachineKind): Machi
   }
 }
 
-function addPassiveToWarehouses(state: GameState, resource: ResourceId, amount: number): void {
-  if (amount <= 0) {
-    return
-  }
-  const warehouses = state.nodes.filter((node) => node.kind === 'warehouse')
-  if (warehouses.length === 0) {
-    return
-  }
-  const perWarehouse = amount / warehouses.length
-  for (const warehouse of warehouses) {
-    addResource(warehouse.inventory, resource, perWarehouse)
-  }
-}
-
 export function runSimulation(state: GameState, dt: number): void {
-  if (state.shopPurchased.municipalDynamoAccess) {
-    addPassiveToWarehouses(state, 'energy', 2.5 * dt)
-  }
+  state.marketCreditsPerSecondByNode = {}
+  state.noPowerByNode = {}
   for (const node of state.nodes) {
     if (node.kind !== 'machine' || !node.machineKind) {
       continue
     }
     const def = getRuntimeMachineDef(state, node.machineKind)
+    const energyPerRun = def.inputs.energy ?? 0
+    if (energyPerRun > 0 && node.inventory.energy + 1e-9 < energyPerRun) {
+      state.noPowerByNode[node.id] = true
+    }
     let maxRuns = def.opsPerSecond * dt
     for (const [resource, perOp] of Object.entries(def.inputs)) {
       const key = resource as ResourceId
@@ -169,6 +159,31 @@ export function runSimulation(state: GameState, dt: number): void {
       addResource(node.inventory, resource, incoming[node.id][resource])
     }
   }
+
+  // Market nodes automatically convert all sellable goods into wallet credits.
+  for (const node of state.nodes) {
+    if (node.kind !== 'market') {
+      continue
+    }
+    let soldCreditsThisTick = 0
+    for (const resource of ALL_RESOURCES) {
+      if (resource === 'credits') {
+        continue
+      }
+      const pricePerUnit = RESOURCE_SELL_PRICES[resource] ?? 0
+      if (pricePerUnit <= 0) {
+        continue
+      }
+      const amount = node.inventory[resource]
+      if (amount <= 0) {
+        continue
+      }
+      node.inventory[resource] = 0
+      soldCreditsThisTick += amount * pricePerUnit
+    }
+    state.walletCredits += soldCreditsThisTick
+    state.marketCreditsPerSecondByNode[node.id] = dt > 0 ? soldCreditsThisTick / dt : 0
+  }
 }
 
 function nodesByResourceAvailability(state: GameState, resource: ResourceId): GraphNode[] {
@@ -233,6 +248,9 @@ function spendCosts(state: GameState, creditsCost: number, researchCost: number)
 
 export function buyShopItem(state: GameState, id: ShopId): boolean {
   if (state.shopPurchased[id]) {
+    return false
+  }
+  if (!isShopItemUnlocked(state, id)) {
     return false
   }
   const item = SHOP_ITEMS.find((entry) => entry.id === id)
