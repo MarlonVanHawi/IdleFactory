@@ -7,8 +7,14 @@ import {
   SHOP_ITEMS,
 } from '../game/data'
 import { canAffordCosts, totalResource, warehouseInventory } from '../game/simulation'
-import { isMachineBuildUnlocked, isShopItemUnlocked } from '../game/unlocks'
-import type { GameState, GraphNode, MachineKind } from '../game/types'
+import {
+  areResearchRequirementsMet,
+  countMachineNodes,
+  countNodesByKind,
+  isMachineBuildUnlocked,
+  isShopItemUnlocked,
+} from '../game/unlocks'
+import type { GameState, GraphNode, MachineKind, NodeKind, ResourceId } from '../game/types'
 
 interface RenderAppOptions {
   state: GameState
@@ -33,6 +39,19 @@ function canNodeOutput(node: GraphNode): boolean {
 
 function canNodeInput(_node: GraphNode): boolean {
   return true
+}
+
+const NODE_KIND_LABELS: Record<NodeKind, string> = {
+  warehouse: 'Warehouse nodes',
+  market: 'Market nodes',
+  machine: 'Machine nodes',
+  splitter: 'Splitter nodes',
+  merger: 'Merger nodes',
+}
+
+function requirementProgressLine(label: string, current: number, required: number): string {
+  const met = current + 1e-9 >= required
+  return `<div class="tiny ${met ? '' : 'muted'}">[${met ? 'x' : ' '}] ${label}: ${formatNumber(current)} / ${formatNumber(required)}</div>`
 }
 
 export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: RenderAppOptions): string {
@@ -65,18 +84,55 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
   const researchRows = RESEARCH_UPGRADES.map((upgrade) => {
     const bought = state.upgradesPurchased[upgrade.id]
     const affordable = canAffordCosts(state, upgrade.creditsCost, upgrade.researchCost)
+    const requirementsMet = areResearchRequirementsMet(state, upgrade.requirements)
     const costText =
       upgrade.researchCost > 0
         ? `${formatNumber(upgrade.creditsCost)} credits + ${formatNumber(upgrade.researchCost)} research`
         : `${formatNumber(upgrade.creditsCost)} credits`
+    const requirementLines: string[] = []
+    const machineReqs = upgrade.requirements?.minMachineCount ?? {}
+    for (const [machineKind, required] of Object.entries(machineReqs)) {
+      const needed = required ?? 0
+      if (needed <= 0) {
+        continue
+      }
+      const current = countMachineNodes(state, machineKind as MachineKind)
+      const label = `${MACHINE_DEFS[machineKind as MachineKind].label} built`
+      requirementLines.push(requirementProgressLine(label, current, needed))
+    }
+    const nodeReqs = upgrade.requirements?.minNodeCount ?? {}
+    for (const [nodeKind, required] of Object.entries(nodeReqs)) {
+      const needed = required ?? 0
+      if (needed <= 0) {
+        continue
+      }
+      const current = countNodesByKind(state, nodeKind as NodeKind)
+      requirementLines.push(requirementProgressLine(NODE_KIND_LABELS[nodeKind as NodeKind], current, needed))
+    }
+    const gatheredReqs = upgrade.requirements?.minGathered ?? {}
+    for (const [resource, required] of Object.entries(gatheredReqs)) {
+      const needed = required ?? 0
+      if (needed <= 0) {
+        continue
+      }
+      const key = resource as ResourceId
+      const current = state.lifetimeGathered[key] ?? 0
+      const label = `${RESOURCE_LABELS[key]} gathered`
+      requirementLines.push(requirementProgressLine(label, current, needed))
+    }
+    const requirementsSection =
+      requirementLines.length > 0
+        ? `<div class="tiny">Requirements:</div>${requirementLines.join('')}`
+        : ''
     return `
       <article class="meta-row">
         <div class="meta-title">${upgrade.name}</div>
         <div class="tiny">${upgrade.description}</div>
+        ${requirementsSection}
         <button
           data-action="buy-upgrade"
           data-upgrade-id="${upgrade.id}"
-          ${!researchUnlocked || bought || !affordable ? 'disabled' : ''}
+          ${!researchUnlocked || bought || !affordable || !requirementsMet ? 'disabled' : ''}
         >
           ${bought ? 'Researched' : `Research (${costText})`}
         </button>
@@ -84,7 +140,20 @@ export function renderApp({ state, worldWidth, worldHeight, dragNodeId }: Render
     `
   }).join('')
 
-  const buildMachineOrder: MachineKind[] = ['municipalDynamo', 'coalMine', 'woodcutter', 'sawmill', 'powerPlant']
+  const buildMachineOrder: MachineKind[] = [
+    'municipalDynamo',
+    'coalMine',
+    'woodcutter',
+    'sawmill',
+    'ironMine',
+    'ironSmelter',
+    'copperMine',
+    'copperSmelter',
+    'wireMill',
+    'steelworks',
+    'machineShop',
+    'powerPlant',
+  ]
   const buildMachineButtons = buildMachineOrder
     .filter((machineKind) => isMachineBuildUnlocked(state, machineKind))
     .map(

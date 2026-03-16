@@ -20,7 +20,19 @@ export type ResourceId =
   | 'steel'
 
 export type NodeKind = 'warehouse' | 'market' | 'machine' | 'splitter' | 'merger'
-export type MachineKind = 'municipalDynamo' | 'coalMine' | 'powerPlant' | 'woodcutter' | 'sawmill'
+export type MachineKind =
+  | 'municipalDynamo'
+  | 'coalMine'
+  | 'powerPlant'
+  | 'woodcutter'
+  | 'sawmill'
+  | 'ironMine'
+  | 'ironSmelter'
+  | 'copperMine'
+  | 'copperSmelter'
+  | 'wireMill'
+  | 'steelworks'
+  | 'machineShop'
 export type PanelScrollKey = 'warehouse' | 'build' | 'research' | 'shop'
 
 export type ShopId =
@@ -80,12 +92,20 @@ export interface ResearchUpgradeDef {
   creditsCost: number
   researchCost: number
   description: string
+  requirements?: ResearchRequirements
+}
+
+export interface ResearchRequirements {
+  minMachineCount?: Partial<Record<MachineKind, number>>
+  minNodeCount?: Partial<Record<NodeKind, number>>
+  minGathered?: Partial<Record<ResourceId, number>>
 }
 
 export interface GameState {
   nodes: GraphNode[]
   edges: GraphEdge[]
   walletCredits: number
+  lifetimeGathered: Inventory
   marketCreditsPerSecondByNode: Record<string, number>
   noPowerByNode: Record<string, boolean>
   snapMode: boolean

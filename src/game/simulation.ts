@@ -1,5 +1,5 @@
 import { ALL_RESOURCES, MACHINE_DEFS, RESEARCH_UPGRADES, RESOURCE_SELL_PRICES, SHOP_ITEMS } from './data'
-import { isShopItemUnlocked } from './unlocks'
+import { areResearchRequirementsMet, isShopItemUnlocked } from './unlocks'
 import type { GameState, GraphEdge, GraphNode, Inventory, MachineDef, MachineKind, ResourceId, ShopId, UpgradeId } from './types'
 
 export function createEmptyInventory(): Inventory {
@@ -111,7 +111,9 @@ export function runSimulation(state: GameState, dt: number): void {
     }
     for (const [resource, perOp] of Object.entries(def.outputs)) {
       const key = resource as ResourceId
-      addResource(node.inventory, key, maxRuns * (perOp ?? 0))
+      const producedAmount = maxRuns * (perOp ?? 0)
+      addResource(node.inventory, key, producedAmount)
+      addResource(state.lifetimeGathered, key, producedAmount)
     }
   }
 
@@ -270,6 +272,9 @@ export function buyResearchUpgrade(state: GameState, id: UpgradeId): boolean {
   }
   const upgrade = RESEARCH_UPGRADES.find((entry) => entry.id === id)
   if (!upgrade) {
+    return false
+  }
+  if (!areResearchRequirementsMet(state, upgrade.requirements)) {
     return false
   }
   if (!spendCosts(state, upgrade.creditsCost, upgrade.researchCost)) {

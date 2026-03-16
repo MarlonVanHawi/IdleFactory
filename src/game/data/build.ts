@@ -17,6 +17,13 @@ export const BUILD_COSTS: {
     coalMine: 240,
     woodcutter: 220,
     sawmill: 420,
+    ironMine: 460,
+    ironSmelter: 620,
+    copperMine: 560,
+    copperSmelter: 740,
+    wireMill: 860,
+    steelworks: 1080,
+    machineShop: 1480,
     powerPlant: 680,
   },
 }

@@ -47,17 +47,17 @@ export const RESOURCE_SELL_PRICES: Partial<Record<ResourceId, number>> = {
   lumber: 2.4,
   paper: 3.2,
   ironOre: 2.0,
-  ironPlate: 3.6,
+  ironPlate: 3.8,
   copperOre: 2.4,
   copperIngot: 4.3,
-  copperWire: 5.6,
+  copperWire: 5.8,
   goldOre: 4.6,
   goldIngot: 8.5,
-  machineParts: 10.5,
+  machineParts: 16.0,
   clay: 1.7,
   bricks: 3.3,
   coke: 4.0,
-  steel: 7.8,
+  steel: 8.4,
 }
 
 export const RESOURCE_LABELS: Record<ResourceId, string> = {

@@ -7,6 +7,9 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 350,
     researchCost: 0,
     description: 'Coal Mine output +20%.',
+    requirements: {
+      minMachineCount: { coalMine: 1 },
+    },
   },
   {
     id: 'improved_drills',
@@ -14,6 +17,10 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 700,
     researchCost: 0,
     description: 'Coal Mine speed +20%.',
+    requirements: {
+      minMachineCount: { coalMine: 2 },
+      minGathered: { coal: 120 },
+    },
   },
   {
     id: 'ore_silos',
@@ -21,6 +28,10 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 1100,
     researchCost: 0,
     description: 'Warehouse planning upgrade (future storage cap bonus).',
+    requirements: {
+      minNodeCount: { warehouse: 2 },
+      minGathered: { wood: 80 },
+    },
   },
   {
     id: 'conveyor_belts',
@@ -28,6 +39,10 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 1700,
     researchCost: 0,
     description: 'Sawmill speed +20%.',
+    requirements: {
+      minMachineCount: { sawmill: 1 },
+      minGathered: { lumber: 60 },
+    },
   },
   {
     id: 'smelter_insulation',
@@ -35,6 +50,10 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 2400,
     researchCost: 0,
     description: 'Power Plant output +15%.',
+    requirements: {
+      minMachineCount: { powerPlant: 1 },
+      minGathered: { energy: 300 },
+    },
   },
   {
     id: 'auto_supervisor',
@@ -42,5 +61,9 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
     creditsCost: 3200,
     researchCost: 30,
     description: 'Automation unlock placeholder.',
+    requirements: {
+      minMachineCount: { coalMine: 2, woodcutter: 2, sawmill: 1 },
+      minGathered: { coal: 250, wood: 200, lumber: 120, energy: 500 },
+    },
   },
 ]

@@ -275,11 +275,28 @@ function parseStatePayload(payload: unknown): GameState {
         }))
     : base.edges
 
+  const lifetimeGathered =
+    parsed.lifetimeGathered && typeof parsed.lifetimeGathered === 'object'
+      ? { ...createEmptyInventory(), ...parsed.lifetimeGathered }
+      : (() => {
+          const derived = createEmptyInventory()
+          for (const node of nodes) {
+            for (const [resource, amount] of Object.entries(node.inventory)) {
+              if (typeof amount === 'number' && Number.isFinite(amount)) {
+                derived[resource as keyof typeof derived] += amount
+              }
+            }
+          }
+          derived.credits += typeof parsed.walletCredits === 'number' ? parsed.walletCredits : 0
+          return derived
+        })()
+
   return {
     ...base,
     ...parsed,
     walletCredits:
       typeof parsed.walletCredits === 'number' ? parsed.walletCredits : hasLegacyProgress ? 0 : base.walletCredits,
+    lifetimeGathered,
     marketCreditsPerSecondByNode:
       parsed.marketCreditsPerSecondByNode && typeof parsed.marketCreditsPerSecondByNode === 'object'
         ? Object.fromEntries(
